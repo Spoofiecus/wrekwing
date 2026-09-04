@@ -9,6 +9,8 @@ import android.graphics.Shader;
 import android.os.Build;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -30,9 +32,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private int score, combo, comboTimer;
     private float comboMult = 1f;
 
-    private float shakeT, shakeMag;
+    private int highScore;
+    private int flights; // total flights this install
+    private int selectedPlane = 0; // index into Plane.Type.values()
+    private float flashT; // screen flash timer on impact
+
     private int gameState = 0; // 0=READY 1=FLYING 2=IMPACT 3=GAMEOVER
     private float stateTimer;
+    private float shakeT, shakeMag;
     private long lastTime;
 
     public GameView(Context context) {
@@ -41,6 +48,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         holder.addCallback(this);
         setFocusable(true);
         skyPaint.setShader(new LinearGradient(0, 0, 0, 1920, 0xFF87CEEB, 0xFFE0F0FF, Shader.TileMode.CLAMP));
+        plane.select(Plane.Type.values()[selectedPlane]);
+        loadStats();
     }
 
     @Override
@@ -89,8 +98,15 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_MOVE:
                 if (gameState == 0) {
+                    // Bottom band = change plane; upper area = start flight
+                    if (event.getY() > screenH * 0.74f) {
+                        cyclePlane();
+                        break;
+                    }
                     gameState = 1;
                     plane.reset(screenW / 2f, 60);
+                    plane.select(Plane.Type.values()[selectedPlane]);
+                    flights++;
                     combo = 0;
                     comboMult = 1f;
                 }
@@ -111,8 +127,31 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         gameState = 0;
     }
 
+    private void cyclePlane() {
+        Plane.Type[] types = Plane.Type.values();
+        selectedPlane = (selectedPlane + 1) % types.length;
+        plane.select(types[selectedPlane]);
+    }
+
+    private void loadStats() {
+        SharedPreferences prefs = getContext()
+                .getSharedPreferences("wreckwing", Context.MODE_PRIVATE);
+        highScore = prefs.getInt("highScore", 0);
+        flights = prefs.getInt("flights", 0);
+    }
+
+    private void saveStats() {
+        SharedPreferences prefs = getContext()
+                .getSharedPreferences("wreckwing", Context.MODE_PRIVATE);
+        prefs.edit()
+                .putInt("highScore", highScore)
+                .putInt("flights", flights)
+                .apply();
+    }
+
     private void update(float dt) {
         if (shakeT > 0) shakeT -= dt;
+        if (flashT > 0) flashT -= dt;
         if (gameState == 0) {
             plane.reset(screenW / 2f, 60);
             plane.roll = (float) Math.sin(System.nanoTime() / 4e8) * 6f;
@@ -129,6 +168,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 comboTimer = 2;
                 shakeT = 0.5f;
                 shakeMag = 12f * force;
+                flashT = 0.25f;
                 vibrate();
             }
         } else {
@@ -136,6 +176,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             stadium.update(dt);
             if (gameState == 2 && stateTimer <= 0) {
                 if (stadium.destructionPercent() >= 100) score += 5000;
+                if (score > highScore) {
+                    highScore = score;
+                    saveStats();
+                }
                 gameState = 3;
                 stateTimer = 0;
             }
@@ -188,6 +232,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             stadium.draw(c, paint);
             drawGround(c);
             drawPlane(c);
+            if (flashT > 0) {
+                paint.setColor(0xFFFFE0A0);
+                int a = (int) (160 * Math.min(1f, flashT / 0.25f));
+                paint.setAlpha(a);
+                c.drawRect(0, 0, screenW, screenH, paint);
+                paint.setAlpha(255);
+            }
             drawHud(c);
             if (shake) c.restore();
         } finally {
@@ -250,24 +301,46 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
         if (gameState == 0) {
             paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTextSize(84);
+            paint.setFakeBoldText(true);
+            paint.setColor(0xFF2A4A8A);
+            c.drawText("WRECK WING", screenW / 2f, screenH * 0.18f, paint);
+            paint.setTextSize(40);
+            paint.setFakeBoldText(false);
             paint.setColor(Color.WHITE);
+            c.drawText("HIGH " + highScore, screenW / 2f, screenH * 0.18f + 60, paint);
+            c.drawText("FLIGHTS " + flights, screenW / 2f, screenH * 0.18f + 105, paint);
+            // plane selector band
+            paint.setColor(0xCC000000);
+            c.drawRect(0, screenH * 0.74f, screenW, screenH, paint);
+            paint.setColor(plane.type.bodyColor);
+            paint.setTextSize(44);
+            paint.setFakeBoldText(true);
+            c.drawText("AIRCRAFT: " + plane.type.name, screenW / 2f, screenH * 0.76f + 40, paint);
+            paint.setFakeBoldText(false);
+            paint.setColor(Color.WHITE);
+            paint.setTextSize(30);
+            c.drawText("tap here to change plane", screenW / 2f, screenH * 0.76f + 76, paint);
             paint.setTextSize(40);
             paint.setAlpha((int) (155 + 100 * Math.abs(Math.sin(System.nanoTime() / 4e8))));
-            c.drawText("TAP TO START", screenW / 2f, screenH / 2f + 180, paint);
+            c.drawText("TAP ABOVE TO FLY", screenW / 2f, screenH * 0.60f, paint);
             paint.setAlpha(255);
         } else if (gameState == 3) {
             paint.setColor(0x99000000);
             c.drawRect(0, 0, screenW, screenH, paint);
             paint.setColor(Color.WHITE);
             paint.setTextSize(72);
+            paint.setFakeBoldText(true);
             paint.setTextAlign(Paint.Align.CENTER);
-            c.drawText("GAME OVER", screenW / 2f, screenH / 2f - 60, paint);
+            c.drawText("GAME OVER", screenW / 2f, screenH / 2f - 80, paint);
+            paint.setFakeBoldText(false);
             paint.setTextSize(44);
-            c.drawText("SCORE " + score, screenW / 2f, screenH / 2f + 10, paint);
-            c.drawText("DESTRUCTION " + stadium.destructionPercent() + "%", screenW / 2f, screenH / 2f + 70, paint);
+            c.drawText("SCORE " + score, screenW / 2f, screenH / 2f - 20, paint);
+            c.drawText("DESTRUCTION " + stadium.destructionPercent() + "%", screenW / 2f, screenH / 2f + 35, paint);
+            c.drawText("HIGH " + highScore, screenW / 2f, screenH / 2f + 90, paint);
             paint.setAlpha((int) (155 + 100 * Math.abs(Math.sin(System.nanoTime() / 4e8))));
             paint.setTextSize(36);
-            c.drawText("TAP TO FLY AGAIN", screenW / 2f, screenH / 2f + 150, paint);
+            c.drawText("TAP TO FLY AGAIN", screenW / 2f, screenH / 2f + 170, paint);
             paint.setAlpha(255);
         }
         paint.setShadowLayer(0, 0, 0, Color.TRANSPARENT);
