@@ -1,0 +1,20 @@
+{
+  "name": "wreck-wing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Wreck Wing - physics destruction game (Unity C# + native Android prototype)",
+  "scripts": {
+    "format": "prettier --write \"**/*.{md,json,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{md,json,yml,yaml}\"",
+    "setup": "bash scripts/setup-hooks.sh",
+    "verify": "bash scripts/verify-env.sh",
+    "apk:native": "cd native-android && bash build-apk.sh"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  },
+  "prettier": {
+    "proseWrap": "preserve",
+    "printWidth": 100
+  }
+}

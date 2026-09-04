@@ -1,0 +1,114 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# =============================================================
+# Wreck Wing pre-commit gate — physically blocks broken commits
+# Installed via: bash scripts/setup-hooks.sh  (core.hooksPath=.githooks)
+# Bypass is logged and discouraged: git commit --no-verify (leads only)
+# =============================================================
+set -u
+FAIL=0
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[1;33m'; NC='\033[0m'
+pass() { echo "${GRN}[PASS]${NC} $1"; }
+fail() { echo "${RED}[BLOCK]${NC} $1"; FAIL=1; }
+warn() { echo "${YLW}[WARN]${NC} $1"; }
+SKIP=""
+for a in "$@"; do case "$a" in --no-verify) ;; *) SKIP="$SKIP $a";; esac; done
+
+# Staged files (added/copied/modified only, skip deletions)
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$STAGED" ] && { echo "No staged files — nothing to check."; exit 0; }
+
+echo "════════ WRECK WING PRE-COMMIT GATE ════════"
+
+# ---------- GATE 1: Hygiene ----------
+echo "── Gate 1: Repo hygiene ──"
+HUGE=$(echo "$STAGED" | xargs -r du -k 2>/dev/null | awk '$1 > 10240 {print $2}')
+[ -n "$HUGE" ] && fail "Files >10MB staged (use Git LFS / external link): $HUGE" || pass "no oversized files"
+
+BIN=$(echo "$STAGED" | grep -E '^Assets/.*(apk|aab|so|dex|jar)$|^native-android/.*\.(apk|dex)$')
+[ -n "$BIN" ] && fail "Binaries in source paths: $BIN" || pass "no binaries in source"
+
+SECRET=$(git diff --cached -U0 | grep -iE '^\+' | grep -viE 'pass:android' | grep -cE '(password|passwd|secret|api[_-]?key|private[_-]?key)[[:space:]]*=[[:space:]]*["'"'"'][^"'"'"']{8,}' || true)
+[ "$SECRET" -gt 0 ] && fail "$SECRET possible secret(s) in diff — review manually" || pass "no secret patterns"
+
+# ---------- GATE 2: Java compile ----------
+echo "── Gate 2: Java compile gate ──"
+JAVA_FILES=$(echo "$STAGED" | grep '\.java$' || true)
+if [ -n "$JAVA_FILES" ]; then
+  SDK_JAR="$HOME/apkbuild/sdk/android.jar"
+  if [ ! -f "$SDK_JAR" ]; then
+    ALT="$PREFIX/share/java/android.jar"
+    [ -f "$ALT" ] && SDK_JAR="$ALT" || SDK_JAR=""
+  fi
+  TMPD=$(mktemp -d)
+  if [ -n "$SDK_JAR" ]; then
+    if javac --release 8 -nowarn -classpath "$SDK_JAR" -d "$TMPD" \
+         $(find native-android/src -name '*.java') 2>"$TMPD/err"; then
+      pass "native-android compiles clean"
+    else
+      sed 's/^/    /' "$TMPD/err" | head -15
+      fail "JAVA COMPILE FAILED — fix errors above"
+    fi
+  else
+    warn "android.jar not found — Java gate SKIPPED (run: pkg install dlxcoder or fetch sdk)"
+  fi
+  rm -rf "$TMPD"
+else
+  pass "no Java changes"
+fi
+
+# ---------- GATE 3: C# structural checks ----------
+echo "── Gate 3: Unity C# structural gate ──"
+CS_FILES=$(echo "$STAGED" | grep '\.cs$' || true)
+if [ -n "$CS_FILES" ]; then
+  for f in $CS_FILES; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f" .cs)
+    found=0
+    for cls in $(grep -oE '(class|struct|enum|interface)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' "$f" | awk '{print $2}'); do
+      if [ "$base" = "$cls" ]; then found=1; break; fi
+    done
+    if [ $found -eq 0 ]; then
+      fail "$f: no type named '$base' declared (Unity file/class name lock)"
+    fi
+    ob=$(grep -o '{' "$f" | wc -l); cb=$(grep -o '}' "$f" | wc -l)
+    if [ "$ob" != "$cb" ]; then
+      fail "$f: unbalanced braces ($ob open vs $cb close)"
+    fi
+    if ! grep -qiE '^using |^namespace |^\s*//|^\s*/\*' "$f"; then
+      warn "$f: no using/namespace/comment found — verify it is a real C# file"
+    fi
+  done
+  [ $FAIL -eq 0 ] && pass "C# structural checks clean"
+else
+  pass "no C# changes"
+fi
+
+# ---------- GATE 4: Python / Shell ----------
+echo "── Gate 4: Script gates ──"
+PY_FILES=$(echo "$STAGED" | grep '\.py$' || true)
+[ -n "$PY_FILES" ] && { for f in $PY_FILES; do python3 -m py_compile "$f" 2>/dev/null || fail "Python syntax error: $f"; done; [ $FAIL -eq 0 ] && pass "python OK"; } || pass "no python changes"
+SH_FILES=$(echo "$STAGED" | grep -E '\.(sh)$|^scripts/' || true)
+[ -n "$SH_FILES" ] && { for f in $SH_FILES; do sh -n "$f" 2>/dev/null || fail "Shell syntax error: $f"; done; [ $FAIL -eq 0 ] && pass "shell OK"; } || pass "no shell changes"
+
+# ---------- GATE 5: Prettier (md/json/yaml) ----------
+echo "── Gate 5: Formatting ──"
+DOC_FILES=$(echo "$STAGED" | grep -E '\.(md|json|ya?ml)$' || true)
+if [ -n "$DOC_FILES" ] && [ -x "node_modules/.bin/prettier" ]; then
+  if node_modules/.bin/prettier --check $DOC_FILES >/dev/null 2>&1; then
+    pass "docs formatted"
+  else
+    fail "unformatted docs — run: npx prettier --write $(echo $DOC_FILES | tr '\n' ' ')"
+  fi
+elif [ -n "$DOC_FILES" ]; then
+  warn "prettier not installed (npm install) — format check SKIPPED"
+else
+  pass "no doc changes"
+fi
+
+echo "════════════════════════════════════"
+if [ $FAIL -ne 0 ]; then
+  echo "${RED}✖ COMMIT BLOCKED — fix the [BLOCK] items above, re-stage, retry.${NC}"
+  exit 1
+fi
+echo "${GRN}✔ ALL GATES PASSED — committing.${NC}"
+exit 0

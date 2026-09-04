@@ -1,0 +1,41 @@
+# ============ Unity ============
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage
+crashlytics-build.properties
+
+# ============ Android / native ============
+native-android/build/
+native-android/build/gen/
+native-android/build/classes/
+*.dex
+*.keystore
+!debug.keystore
+
+# ============ Node ============
+node_modules/
+package-lock.json
+
+# ============ OS / editor ============
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.vscode/
+.idea/
+
+# ============ Project temp ============
+/tmp/
+*.log
