@@ -40,7 +40,8 @@ namespace WreckWing.EditorTools
             // 1. Generate the MainMenu scene (idempotent).
             if (!System.IO.File.Exists(ScenePath))
             {
-                SceneSetup.SetupMainMenuScene();
+                // Use fully qualified name to avoid ambiguity with UnityEditor.SceneManagement.SceneSetup
+                WreckWing.Scenes.SceneSetup.SetupMainMenuScene();
             }
             else
             {
@@ -57,9 +58,10 @@ namespace WreckWing.EditorTools
             PlayerSettings.productName = "Wreck Wing";
             PlayerSettings.companyName = "WreckWing Studios";
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
-            // Unity 2022.3+: targetSdkVersion is an integer (API level), not an enum.
-            // API 33 = Android 13 (required minimum for Google Play as of Aug 2024)
+            // Unity 2022.3+: BOTH minSdkVersion and targetSdkVersion are integers (API levels), not enums.
+            // API 24 = Android 7.0 (Nougat) — minimum supported
+            // API 33 = Android 13 (Tiramisu) — Google Play minimum target as of Aug 2024
+            PlayerSettings.Android.minSdkVersion = 24;
             PlayerSettings.Android.targetSdkVersion = 33;
 
             // 4. Auto-sign with a debug keystore (Unity generates on first build).
