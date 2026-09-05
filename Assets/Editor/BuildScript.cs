@@ -58,11 +58,11 @@ namespace WreckWing.EditorTools
             PlayerSettings.productName = "Wreck Wing";
             PlayerSettings.companyName = "WreckWing Studios";
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
-            // Unity 2022.3+: BOTH minSdkVersion and targetSdkVersion are integers (API levels), not enums.
-            // API 24 = Android 7.0 (Nougat) — minimum supported
-            // API 33 = Android 13 (Tiramisu) — Google Play minimum target as of Aug 2024
-            PlayerSettings.Android.minSdkVersion = 24;
-            PlayerSettings.Android.targetSdkVersion = 33;
+            // Unity 2022.3: minSdkVersion and targetSdkVersion use AndroidSdkVersions enum.
+            // AndroidApiLevel24 = API 24 (Android 7.0 Nougat) — minimum supported
+            // AndroidApiLevel33 = API 33 (Android 13 Tiramisu) — Google Play minimum target as of Aug 2024
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel33;
 
             // 4. Auto-sign with a debug keystore (Unity generates on first build).
             PlayerSettings.Android.useCustomKeystore = false;
