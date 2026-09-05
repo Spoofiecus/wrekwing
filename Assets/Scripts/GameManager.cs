@@ -58,6 +58,17 @@ namespace WreckWing.Core
             QualityManager.Update();
         }
 
+        private void HandlePauseInput()
+        {
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (CurrentState == GameState.Playing)
+                    SetGameState(GameState.Paused);
+                else if (CurrentState == GameState.Paused)
+                    ResumeGame();
+            }
+        }
+
         private void InitializeSystems()
         {
             ScoreManager = FindObjectOfType<ScoreManager>();
@@ -73,7 +84,7 @@ namespace WreckWing.Core
         {
             if (CurrentState == newState) return;
 
-            CurrentState = newState;
+            currentState = newState;
             OnGameStateChanged?.Invoke(newState);
 
             switch (newState)

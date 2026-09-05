@@ -21,7 +21,7 @@ namespace WreckWing.Gameplay
             if (controller != null)
             {
                 controller.SetPlaneData(planeData);
-                controller.OnCrashed += OnPlaneCrashed;
+                controller.OnCrashed += () => OnPlaneCrashed(controller);
             }
 
             return controller;
