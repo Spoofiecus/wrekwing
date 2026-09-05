@@ -15,7 +15,8 @@ namespace WreckWing.Core
         [SerializeField] private bool dontDestroyOnLoad = true;
 
         [Header("Game State")]
-        public GameState CurrentState { get; private set; }
+        [SerializeField] private GameState currentState;
+        public GameState CurrentState => currentState;
         public bool IsPaused { get; private set; }
 
         public System.Action<GameState> OnGameStateChanged;
