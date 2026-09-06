@@ -30,7 +30,7 @@ namespace WreckWing.EditorTools
 
         private static void EnsureMainMenuScene()
         {
-            bool sceneExists = AssetDatabase.GetAssetOrNull(ScenePath) != null;
+            bool sceneExists = AssetDatabase.LoadMainAssetAtPath(ScenePath) != null;
 
             if (!sceneExists)
             {

@@ -1,0 +1,38 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Pre-build compile gate (Roslyn csc, .NET Standard 2.1 profile — matches UCB).
+# Exit 0 = safe to trigger cloud build. Exit 1 = DO NOT BUILD.
+set -u
+PROJ="$HOME/Wreck Wing"
+UEDLL="$HOME/unity-editor/Editor/Data/Managed"
+NS="$HOME/unity-editor/Editor/Data/NetStandard"
+TPL="$HOME/unity-editor/Editor/Data/Resources/PackageManager/ProjectTemplates/libcache/com.unity.template.3d-8.1.3/ScriptAssemblies"
+OUT="$HOME/ww-compile-check"
+rm -rf "$OUT"; mkdir -p "$OUT"
+
+REFS=("-r:$NS/ref/2.1.0/netstandard.dll" "-r:$NS/compat/2.1.0/shims/netfx/mscorlib.dll")
+SEEN=",mscorlib.dll,netstandard.dll,"
+add_ref() { b=$(basename "$1"); case ",$SEEN," in *",$b,"*) return;; esac; SEEN="$SEEN$b,"; REFS+=("-r:$1"); }
+
+while IFS= read -r f; do add_ref "$f"; done < <(find "$NS/compat/2.1.0/shims/netstandard" -name '*.dll' 2>/dev/null)
+while IFS= read -r f; do add_ref "$f"; done < <(find "$UEDLL/UnityEngine" -maxdepth 1 -name '*.dll' 2>/dev/null)
+for extra in "$TPL/UnityEngine.UI.dll" "$TPL/Unity.TextMeshPro.dll" "$TPL/UnityEditor.UI.dll"; do
+  [ -f "$extra" ] && add_ref "$extra"
+done
+
+SRCS=()
+while IFS= read -r f; do SRCS+=("$f"); done < <(find "$PROJ/Assets/Scripts" "$PROJ/Assets/Editor" -name '*.cs' 2>/dev/null)
+
+echo "Compiling ${#SRCS[@]} sources against ${#REFS[@]} assemblies (netstandard2.1 profile)..."
+csc -noconfig -nostdlib -target:library -out:"$OUT/check.dll" \
+  -nowarn:CS0618,CS0414,CS0108,CS0067,CS0169,CS0109,CS0649,CS0219,CS0168,CS0164,CS0162,CS4014,CS1998,CS0660,CS0661,CS0472,CS0214 \
+  -define:UNITY_EDITOR \
+  "${REFS[@]}" "${SRCS[@]}" 2>"$OUT/errors.txt"
+RC=$?
+if [ $RC -eq 0 ]; then
+  echo "COMPILE OK - safe to build"
+  exit 0
+else
+  echo "COMPILE FAILED - do NOT trigger a cloud build. Unique errors:"
+  grep -E ': error ' "$OUT/errors.txt" | sort -u | head -40
+  exit 1
+fi
