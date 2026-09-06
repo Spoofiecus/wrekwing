@@ -1,74 +1,122 @@
 #if UNITY_EDITOR
-using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using WreckWing.Scenes;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace WreckWing.EditorTools
 {
     /// <summary>
-    /// Build configuration for Unity Cloud Build.
-    /// PreExport() configures the project (scene, PlayerSettings, Build Settings).
-    /// Unity Cloud Build then automatically calls BuildPipeline.BuildPlayer.
-    /// BuildAndroid() is kept for local -executeMethod usage.
+    /// Build configuration for Unity Cloud Build on Unity 2022.3.
+    ///
+    /// PreExport() (wired as preExportMethod in UCB: WreckWing.EditorTools.BuildScript.PreExport)
+    /// expands the scene list and applies platform PlayerSettings; UCB then runs the standard
+    /// playerExporter, which drives BuildPipeline.BuildPlayer itself. PreExport therefore must
+    /// NOT call BuildPipeline.BuildPlayer, and must NOT touch the active build target (UCB sets
+    /// it from its own config).
+    ///
+    /// BuildAndroid() is retained for local `-executeMethod` usage: it applies the same
+    /// configuration and drives BuildPipeline.BuildPlayer directly, logging totalSize and
+    /// exiting non-zero on failure.
     /// </summary>
     public static class BuildScript
     {
-        private const string ScenePath = "Assets/Scenes/MainMenu.unity";
+        public const string ScenePath = "Assets/Scenes/MainMenu.unity";
 
         /// <summary>
-        /// Called by Unity Cloud Build as preExportMethod.
-        /// Configures the project but does NOT build — UCB handles the build.
+        /// Unity Cloud Build preExportMethod entry point.
+        /// Idempotent: only regenerates the MainMenu scene if it is missing from this checkout;
+        /// an existing committed scene is left byte-for-byte untouched (no reserialize, no repo
+        /// noise).
         /// </summary>
         public static void PreExport()
         {
             Debug.Log("[BuildScript] PreExport: Configuring project for Unity Cloud Build...");
 
-            // 1. Generate the MainMenu scene (idempotent).
-            if (!System.IO.File.Exists(ScenePath))
-            {
-                // Use fully qualified name to avoid ambiguity with UnityEditor.SceneManagement.SceneSetup
-                WreckWing.Scenes.SceneSetup.SetupMainMenuScene();
-            }
-            else
-            {
-                var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-                EditorSceneManager.SaveScene(scene);
-            }
-
-            // 2. Ensure the scene is the sole entry in Build Settings.
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
-
-            // 3. Android platform + identification.
-            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
-            PlayerSettings.applicationIdentifier = "com.wreckwing.game";
-            PlayerSettings.productName = "Wreck Wing";
-            PlayerSettings.companyName = "WreckWing Studios";
-            PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
-            // Unity 2022.3: minSdkVersion and targetSdkVersion use AndroidSdkVersions enum.
-            // AndroidApiLevel24 = API 24 (Android 7.0 Nougat) — minimum supported
-            // AndroidApiLevel33 = API 33 (Android 13 Tiramisu) — Google Play minimum target as of Aug 2024
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
-            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel33;
-
-            // 4. Auto-sign with a debug keystore (Unity generates on first build).
-            PlayerSettings.Android.useCustomKeystore = false;
+            EnsureMainMenuScene();
+            ConfigureAndroidPlayerSettings();
 
             Debug.Log("[BuildScript] PreExport: Configuration complete. Unity Cloud Build will now build the player.");
         }
 
-        /// <summary>Called by Unity Cloud Build when configured as the build method (legacy/custom).</summary>
+        /// <summary>
+        /// Open-or-generate scene bootstrap.
+        /// Opening the committed scene validates that it exists without touching any file-system
+        /// API and without dirtying a present, committed scene. If it is missing (fresh checkout
+        /// predating the committed scene), we generate+save it via SceneSetup and then point Build
+        /// Settings at it.
+        /// </summary>
+        private static void EnsureMainMenuScene()
+        {
+            bool sceneExists = false;
+            try
+            {
+                EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                sceneExists = true;
+                Debug.Log("[BuildScript] MainMenu scene found; leaving it untouched.");
+            }
+            catch (Exception)
+            {
+                sceneExists = false;
+            }
+
+            if (!sceneExists)
+            {
+                Debug.Log("[BuildScript] MainMenu scene not present; generating via WreckWing.Scenes.SceneSetup.");
+
+                // Ensure Assets/Scenes exists before SceneSetup saves into it, without using
+                // any (non-compiling) file-system API.
+                if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
+                {
+                    AssetDatabase.CreateFolder("Assets/Scenes");
+                }
+
+                WreckWing.Scenes.SceneSetup.SetupMainMenuScene();
+            }
+
+            // Ensure Build Settings lists it as the sole enabled scene.
+            EditorBuildSettings.scenes =
+                new EditorBuildSettingsScene[] { new EditorBuildSettingsScene(ScenePath, true) };
+        }
+
+        /// <summary>
+        /// Android identification + SDK policy, shared by UCB PreExport and local builds.
+        /// </summary>
+        private static void ConfigureAndroidPlayerSettings()
+        {
+            PlayerSettings.applicationIdentifier = "com.wreckwing.game";
+            PlayerSettings.productName = "Wreck Wing";
+            PlayerSettings.companyName = "WreckWing Studios";
+            PlayerSettings.defaultInterfaceOrientation = UnityEditor.UIOrientation.Portrait;
+
+            // Unity 2022.3: min/target SDK versions use the AndroidSdkVersions enum.
+            // AndroidApiLevel24 = API 24 (Android 7.0 Nougat)  - minimum supported.
+            // AndroidApiLevel33 = API 33 (Android 13)           - modern Play-store baseline.
+            PlayerSettings.Android.minSdkVersion = UnityEditor.AndroidSdkVersions.AndroidApiLevel24;
+            PlayerSettings.Android.targetSdkVersion = UnityEditor.AndroidSdkVersions.AndroidApiLevel33;
+
+            // Let Unity auto-sign with its generated debug keystore.
+            PlayerSettings.Android.useCustomKeystore = false;
+        }
+
+        /// <summary>
+        /// Local/custom build for `-executeMethod WreckWing.EditorTools.BuildScript.BuildAndroid`.
+        /// Applies the same configuration, then drives BuildPipeline.BuildPlayer directly,
+        /// reports totalSize and exits non-zero on failure.
+        /// </summary>
         public static void BuildAndroid()
         {
-            PreExport(); // Configure first
-            
-            Debug.Log("[BuildScript] Starting build (local/custom)...");
-            var options = new BuildPlayerOptions
+            Debug.Log("[BuildScript] Starting local/custom Android build...");
+
+            EnsureMainMenuScene();
+            ConfigureAndroidPlayerSettings();
+
+            BuildPlayerOptions options = new BuildPlayerOptions
             {
-                scenes = new[] { ScenePath },
+                scenes = new String[] { ScenePath },
                 locationPathName = "Build/WreckWing.apk",
                 target = BuildTarget.Android,
                 options = BuildOptions.None
@@ -79,23 +127,23 @@ namespace WreckWing.EditorTools
 
             if (summary.result == BuildResult.Succeeded)
             {
-                Debug.Log($"[BuildScript] BUILD SUCCEEDED: {summary.totalSize} bytes at {options.locationPathName}");
+                Debug.Log("[BuildScript] BUILD SUCCEEDED: " + summary.totalSize + " bytes at " + options.locationPathName);
             }
             else
             {
-                Debug.LogError($"[BuildScript] BUILD FAILED: {summary.result}");
-                foreach (var step in report.steps)
+                Debug.LogError("[BuildScript] BUILD FAILED: " + summary.result);
+                for (BuildStep step : report.steps)
                 {
-                    foreach (var msg in step.messages)
+                    for (BuildStepMessage msg : step.messages)
                     {
-                        Debug.LogError($"[BuildScript] {msg.content}");
+                        Debug.LogError("[BuildScript] " + msg.content);
                     }
                 }
                 EditorApplication.Exit(1);
             }
         }
 
-        /// <summary>Local convenience + default UCC fallback.</summary>
+        /// <summary>Local convenience alias for the default custom build method.</summary>
         public static void Build()
         {
             BuildAndroid();
