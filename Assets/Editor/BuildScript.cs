@@ -4,8 +4,6 @@ using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 namespace WreckWing.EditorTools
 {
@@ -132,9 +130,9 @@ namespace WreckWing.EditorTools
             else
             {
                 Debug.LogError("[BuildScript] BUILD FAILED: " + summary.result);
-                for (BuildStep step : report.steps)
+                foreach (BuildStep step in report.steps)
                 {
-                    for (BuildStepMessage msg : step.messages)
+                    foreach (BuildStepMessage msg in step.messages)
                     {
                         Debug.LogError("[BuildScript] " + msg.content);
                     }
