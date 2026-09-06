@@ -10,32 +10,22 @@ using WreckWing.Scenes;
 namespace WreckWing.EditorTools
 {
     /// <summary>
-    /// Entry point used by Unity Cloud Build (and local -executeMethod).
-    /// Generates the scene, wires Build Settings, and produces an Android APK.
+    /// Build configuration for Unity Cloud Build.
+    /// PreExport() configures the project (scene, PlayerSettings, Build Settings).
+    /// Unity Cloud Build then automatically calls BuildPipeline.BuildPlayer.
+    /// BuildAndroid() is kept for local -executeMethod usage.
     /// </summary>
     public static class BuildScript
     {
         private const string ScenePath = "Assets/Scenes/MainMenu.unity";
 
-        /// <summary>Called by Unity Cloud Build when configured to use this method.</summary>
-        public static void BuildAndroid()
+        /// <summary>
+        /// Called by Unity Cloud Build as preExportMethod.
+        /// Configures the project but does NOT build — UCB handles the build.
+        /// </summary>
+        public static void PreExport()
         {
-            int code = DoConfigureAndBuild(BuildTarget.Android);
-            if (code != 0)
-            {
-                EditorApplication.Exit(1);
-            }
-        }
-
-        /// <summary>Local convenience + default UCC fallback.</summary>
-        public static void Build()
-        {
-            BuildAndroid();
-        }
-
-        private static int DoConfigureAndBuild(BuildTarget target)
-        {
-            Debug.Log("[BuildScript] Configuring project...");
+            Debug.Log("[BuildScript] PreExport: Configuring project for Unity Cloud Build...");
 
             // 1. Generate the MainMenu scene (idempotent).
             if (!System.IO.File.Exists(ScenePath))
@@ -53,7 +43,7 @@ namespace WreckWing.EditorTools
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
 
             // 3. Android platform + identification.
-            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, target);
+            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
             PlayerSettings.applicationIdentifier = "com.wreckwing.game";
             PlayerSettings.productName = "Wreck Wing";
             PlayerSettings.companyName = "WreckWing Studios";
@@ -67,12 +57,20 @@ namespace WreckWing.EditorTools
             // 4. Auto-sign with a debug keystore (Unity generates on first build).
             PlayerSettings.Android.useCustomKeystore = false;
 
-            Debug.Log("[BuildScript] Starting build...");
+            Debug.Log("[BuildScript] PreExport: Configuration complete. Unity Cloud Build will now build the player.");
+        }
+
+        /// <summary>Called by Unity Cloud Build when configured as the build method (legacy/custom).</summary>
+        public static void BuildAndroid()
+        {
+            PreExport(); // Configure first
+            
+            Debug.Log("[BuildScript] Starting build (local/custom)...");
             var options = new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },
                 locationPathName = "Build/WreckWing.apk",
-                target = target,
+                target = BuildTarget.Android,
                 options = BuildOptions.None
             };
 
@@ -82,18 +80,25 @@ namespace WreckWing.EditorTools
             if (summary.result == BuildResult.Succeeded)
             {
                 Debug.Log($"[BuildScript] BUILD SUCCEEDED: {summary.totalSize} bytes at {options.locationPathName}");
-                return 0;
             }
-
-            Debug.LogError($"[BuildScript] BUILD FAILED: {summary.result}");
-            foreach (var step in report.steps)
+            else
             {
-                foreach (var msg in step.messages)
+                Debug.LogError($"[BuildScript] BUILD FAILED: {summary.result}");
+                foreach (var step in report.steps)
                 {
-                    Debug.LogError($"[BuildScript] {msg.content}");
+                    foreach (var msg in step.messages)
+                    {
+                        Debug.LogError($"[BuildScript] {msg.content}");
+                    }
                 }
+                EditorApplication.Exit(1);
             }
-            return 1;
+        }
+
+        /// <summary>Local convenience + default UCC fallback.</summary>
+        public static void Build()
+        {
+            BuildAndroid();
         }
     }
 }
