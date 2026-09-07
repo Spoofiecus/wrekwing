@@ -20,3 +20,14 @@ Goal: first green cloud build + APK.
   LoadMainAssetAtPath. Commit 6f56422.
 - Build #19 triggered (incremental, cleanBuild:false) on 6f56422 after COMPILE OK.
 - NOTE: .sh files are POSIX-checked by pre-commit hook -> keep bash scripts extension-less (tools/compile-check).
+
+## Update (build #19 RCA + Android config fixes, commit 99166b6)
+
+- Build #19 FATAL: UnityException - custom gradleTemplate.properties lacked mandatory markers
+  (unityStreamingAssets=.unity3d**STREAMING_ASSETS**, **ADDITIONAL_PROPERTIES**, **JVM_HEAP_SIZE**).
+- FIXED: markers restored; settings.gradle deleted (wrong filename, Unity expects settingsTemplate.gradle -> inert);
+  AndroidManifest replaced with minimal compliant version (no package/uses-sdk/unused required-true features).
+- Verified: all markers present, XML valid, manifest lint clean, compile gate OK. NOT built yet - awaiting user approval.
+- Facts: editor here is x86-64 ELF (e_machine 0x3E), device aarch64, no ARM64 Linux Unity editor exists ->
+  UCB is the only build plane; keep local editor for compile-gate DLLs. Proot ubuntu container exists.
+- Game code uses NO vibration/mic/network/UnityServices (grep-verified); INTERNET perm kept for Analytics module.
