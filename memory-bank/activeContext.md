@@ -31,3 +31,16 @@ Goal: first green cloud build + APK.
 - Facts: editor here is x86-64 ELF (e_machine 0x3E), device aarch64, no ARM64 Linux Unity editor exists ->
   UCB is the only build plane; keep local editor for compile-gate DLLs. Proot ubuntu container exists.
 - Game code uses NO vibration/mic/network/UnityServices (grep-verified); INTERNET perm kept for Analytics module.
+
+## Update (docs cross-reference audit, pre-build #20)
+
+- Manifest docs: custom manifest MERGES over Unity Library Manifest; permissions auto-injected (INTERNET via Analytics).
+  Minimal manifest is compliant. Gradle docs: unityTemplateVersion/unityProjectPath injected via **ADDITIONAL_PROPERTIES**;
+  Unity throws if template version mismatches -> marker mandatory (validated our fix).
+- API audit vs editor XML docs: PlayerSettings.Android.min/targetSdkVersion, AndroidSdkLevels 24/33, useCustomKeystore,
+  defaultInterfaceOrientation+UIOrientation, AssetDatabase.LoadMainAssetAtPath, EditorBuildSettings.scenes all present;
+  ctor/build APIs proven by gate compilation against real DLLs.
+- UCB target: bundleId casing fixed Com.wrekwing.game -> com.wreckwing.game (matches PlayerSettings).
+  androidSDK android_sdk_35 (build machine) >= targetSdk 33 = compatible. unityVersion latest2022_3 (62f3) opens
+  55f1 project (patch-line compatible).
+- PLAY SUBMISSION TODO (not build-blocking): bump targetSdkVersion 33 -> 34+ per Play policy at submission time.
