@@ -53,3 +53,15 @@ Goal: first green cloud build + APK.
 - FIX: deleted custom manifest entirely -> Unity default restores icon+launcher. Compile gate OK. Pushed b512a5f.
 - NEXT (needs approval): build #21. After: uninstall/reinstall or update-in-place restores icon.
 - TODO later: add real game icon (PlayerSettings > Icon; needs icon assets committed) - currently Unity default icon.
+
+## Update (build #21 green APK but launch rejected on device; commit 7addb2a)
+
+- APK installed but showed "This app is not available on the latest version of Android. Check for an update or
+  contact the developer" at LAUNCH.
+- Device: Android 16 / API 36 / arm64-v8a / security patch 2026-05. Modern Armv9 flagships (Cortex-X4+)
+  dropped AArch32 (32-bit) execution entirely -> 64-bit-only devices reject 32-bit-only APKs.
+- RCA: downloaded APK was armeabi-v7a-ONLY (no arm64 libunity.so). PlayerSettings.targetArchitectures
+  absent in source -> Unity defaulted to ARMv7-only. Manifest itself was fine (minSdk 24, targetSdk 33).
+- FIX: PreExport now sets PlayerSettings.Android.targetArchitectures = ARMv7 | ARM64 (Mono backend
+  supports arm64, no IL2CPP needed). Gate OK. Pushed 7addb2a. Awaiting build #22 approval.
+- NOTE on downloaded APKs: partial dl timed out at 21MB/23.7MB; used curl -C - resume in background.
