@@ -58,6 +58,13 @@ namespace WreckWing.EditorTools
             PlayerSettings.defaultInterfaceOrientation = UnityEditor.UIOrientation.Portrait;
             PlayerSettings.Android.minSdkVersion = UnityEditor.AndroidSdkVersions.AndroidApiLevel24;
             PlayerSettings.Android.targetSdkVersion = UnityEditor.AndroidSdkVersions.AndroidApiLevel33;
+            // Build for both 64-bit and 32-bit ABIs. Modern Armv9 flagships (Cortex-X4+)
+            // dropped 32-bit execution entirely, so an armeabi-v7a-only APK is rejected on
+            // those devices ("not available on the latest version of Android").
+            PlayerSettings.Android.targetArchitectures =
+                UnityEditor.AndroidArchitecture.ARMv7 | UnityEditor.AndroidArchitecture.ARM64;
+
+            // Let Unity auto-sign with its generated debug keystore.
             PlayerSettings.Android.useCustomKeystore = false;
         }
 
