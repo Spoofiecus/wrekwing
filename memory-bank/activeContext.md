@@ -44,3 +44,12 @@ Goal: first green cloud build + APK.
   androidSDK android_sdk_35 (build machine) >= targetSdk 33 = compatible. unityVersion latest2022_3 (62f3) opens
   55f1 project (patch-line compatible).
 - PLAY SUBMISSION TODO (not build-blocking): bump targetSdkVersion 33 -> 34+ per Play policy at submission time.
+
+## Update (build #20 SUCCEEDED -> APK installed; no-icon bug fixed, commit b512a5f)
+
+- FIRST GREEN BUILD. APK installed on device but no launcher icon.
+- RCA: minimal custom AndroidManifest overrode Unity Library Manifest template -> removed <application> icon attr
+  and UnityPlayerActivity MAIN/LAUNCHER intent-filter -> installed but no home-screen entry.
+- FIX: deleted custom manifest entirely -> Unity default restores icon+launcher. Compile gate OK. Pushed b512a5f.
+- NEXT (needs approval): build #21. After: uninstall/reinstall or update-in-place restores icon.
+- TODO later: add real game icon (PlayerSettings > Icon; needs icon assets committed) - currently Unity default icon.
